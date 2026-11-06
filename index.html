@@ -1,0 +1,262 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Daily Task Manager</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f1f5f9;color:#172033;font-family:Arial,sans-serif}
+header{background:#172554;color:white;padding:24px 18px;border-radius:0 0 25px 25px}
+header h2{margin:0 0 7px}
+header p{margin:0;color:#cbd5e1;font-size:13px}
+main{max-width:600px;margin:auto;padding:15px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:15px 0}
+.stat,.panel{background:white;padding:15px;border-radius:14px;box-shadow:0 2px 8px #00000009}
+.stat strong{display:block;font-size:25px;margin-top:7px}
+.stat small{color:#64748b}
+.panel{margin-bottom:14px}
+h3{margin:0 0 14px;font-size:17px}
+input,select{width:100%;padding:12px;border:1px solid #dbe2ea;border-radius:9px;margin-bottom:10px;font-size:15px;background:white}
+button{border:0;padding:11px 14px;border-radius:9px;font-size:14px;cursor:pointer}
+.add{background:#2563eb;color:white;width:100%;font-weight:bold}
+.filters{display:flex;gap:7px;margin-bottom:12px}
+.filters button{flex:1;background:#e2e8f0;color:#334155}
+.filters button.active{background:#1d4ed8;color:white}
+.task{border:1px solid #e2e8f0;padding:12px;border-radius:12px;margin-bottom:9px;background:#fff}
+.tasktop{display:flex;gap:9px;align-items:center}
+.task input[type=checkbox]{width:19px;height:19px;margin:0}
+.taskname{font-weight:bold;flex:1;overflow-wrap:anywhere}
+.completed .taskname{text-decoration:line-through;color:#94a3b8}
+.meta{font-size:12px;color:#64748b;margin:8px 0}
+.actions{display:flex;gap:7px}
+.actions button{font-size:12px;padding:7px 10px}
+.edit{background:#dbeafe;color:#1d4ed8}
+.del{background:#fee2e2;color:#b91c1c}
+.status{font-size:11px;color:#15803d;background:#dcfce7;padding:5px 8px;border-radius:20px}
+.progress{height:9px;background:#e2e8f0;border-radius:10px;overflow:hidden}
+.progress div{height:100%;background:#16a34a;width:0;transition:.2s}
+.empty{text-align:center;padding:25px;color:#94a3b8}
+footer{text-align:center;color:#94a3b8;font-size:12px;padding:20px}
+</style>
+</head>
+<body>
+<header>
+<h2>📋 My Daily Tasks</h2>
+<p>প্রতিদিনের কাজ গুছিয়ে রাখুন, সফলতার পথে এগিয়ে যান।</p>
+</header>
+<main>
+<div class="stats">
+<div class="stat"><small>📋 মোট কাজ</small><strong id="total">0</strong></div>
+<div class="stat"><small>✅ সম্পন্ন</small><strong id="done">0</strong></div>
+<div class="stat"><small>⏳ বাকি</small><strong id="pending">0</strong></div>
+</div>
+
+<div class="panel">
+<h3>📊 কাজের অগ্রগতি</h3>
+<div id="percent">0% সম্পন্ন</div>
+<div class="progress"><div id="bar"></div></div>
+</div>
+
+<div class="panel">
+<h3 id="formTitle">➕ নতুন কাজ যোগ করুন</h3>
+<input id="taskName" placeholder="কাজের নাম লিখুন">
+<label>কাজের তারিখ</label>
+<input type="date" id="taskDate">
+<label>শেষ করার তারিখ (ঐচ্ছিক)</label>
+<input type="date" id="dueDate">
+<select id="category">
+<option value="ব্যক্তিগত">ব্যক্তিগত</option>
+<option value="অফিস">অফিস</option>
+<option value="ব্যবসা">ব্যবসা</option>
+<option value="পড়াশোনা">পড়াশোনা</option>
+<option value="অন্যান্য">অন্যান্য</option>
+</select>
+<button class="add" onclick="saveTask()">+ কাজ সেভ করুন</button>
+</div>
+
+<div class="panel">
+<h3>🗂️ আমার কাজের তালিকা</h3>
+<input type="date" id="filterDate" onchange="render()">
+<div class="filters">
+<button class="active" onclick="setFilter('all',this)">সব</button>
+<button onclick="setFilter('pending',this)">বাকি</button>
+<button onclick="setFilter('done',this)">সম্পন্ন</button>
+</div>
+<div id="taskList"></div>
+</div>
+
+<div class="panel">
+<h3>📅 পুরোনো কাজের ইতিহাস</h3>
+<select id="historyDate" onchange="showHistory()">
+<option value="">সব তারিখ</option>
+</select>
+<div id="history"></div>
+</div>
+
+<div class="panel">
+<h3>💾 ডেটা ব্যাকআপ</h3>
+<p style="font-size:13px;color:#64748b">মোবাইল পরিবর্তন বা ব্রাউজারের ডেটা মুছে যাওয়ার আগে ব্যাকআপ রাখুন।</p>
+<button class="edit" onclick="backup()">ডেটা ডাউনলোড</button>
+<button class="del" onclick="document.getElementById('restore').click()">ব্যাকআপ ফিরিয়ে আনুন</button>
+<input type="file" id="restore" accept=".json" hidden onchange="restoreData(event)">
+</div>
+</main>
+<footer>My Daily Task Manager • Your personal productivity tool</footer>
+
+<script>
+const KEY="my_daily_tasks_v1";
+let tasks=[];
+let filter="all";
+let editing=null;
+
+function today(){
+ const d=new Date();
+ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function load(){
+ try{tasks=JSON.parse(localStorage.getItem(KEY))||[]}
+ catch(e){tasks=[]}
+}
+function save(){
+ localStorage.setItem(KEY,JSON.stringify(tasks));
+ render();
+}
+function saveTask(){
+ const name=document.getElementById("taskName").value.trim();
+ const date=document.getElementById("taskDate").value;
+ const due=document.getElementById("dueDate").value;
+ const category=document.getElementById("category").value;
+ if(!name||!date){alert("কাজের নাম ও তারিখ লিখুন");return}
+ if(due&&due<date){alert("শেষ করার তারিখ কাজের তারিখের আগে হতে পারবে না");return}
+ if(editing!==null){
+  const t=tasks.find(x=>x.id===editing);
+  if(t)Object.assign(t,{name,date,due,category});
+  editing=null;
+  document.getElementById("formTitle").innerText="➕ নতুন কাজ যোগ করুন";
+ }else{
+  tasks.push({id:Date.now(),name,date,due,category,done:false});
+ }
+ document.getElementById("taskName").value="";
+ document.getElementById("dueDate").value="";
+ document.getElementById("taskDate").value=today();
+ save();
+}
+function toggle(id){
+ const t=tasks.find(x=>x.id===id);
+ if(t)t.done=!t.done;
+ save();
+}
+function editTask(id){
+ const t=tasks.find(x=>x.id===id);
+ if(!t)return;
+ editing=id;
+ document.getElementById("taskName").value=t.name;
+ document.getElementById("taskDate").value=t.date;
+ document.getElementById("dueDate").value=t.due||"";
+ document.getElementById("category").value=t.category;
+ document.getElementById("formTitle").innerText="✏️ কাজ পরিবর্তন করুন";
+ window.scrollTo({top:0,behavior:"smooth"});
+}
+function deleteTask(id){
+ if(confirm("এই কাজটি মুছে ফেলতে চান?")){
+  tasks=tasks.filter(t=>t.id!==id);
+  save();
+ }
+}
+function setFilter(f,btn){
+ filter=f;
+ document.querySelectorAll(".filters button").forEach(b=>b.classList.remove("active"));
+ btn.classList.add("active");
+ render();
+}
+function render(){
+ const date=document.getElementById("filterDate").value;
+ const total=tasks.length;
+ const done=tasks.filter(t=>t.done).length;
+ const pending=total-done;
+ document.getElementById("total").innerText=total;
+ document.getElementById("done").innerText=done;
+ document.getElementById("pending").innerText=pending;
+ const pct=total?Math.round(done/total*100):0;
+ document.getElementById("percent").innerText=pct+"% সম্পন্ন";
+ document.getElementById("bar").style.width=pct+"%";
+
+ let list=tasks.filter(t=>
+ (!date||t.date===date)&&
+ (filter==="all"||(filter==="done"&&t.done)||(filter==="pending"&&!t.done))
+ );
+ list.sort((a,b)=>a.date.localeCompare(b.date));
+ const box=document.getElementById("taskList");
+ if(!list.length){
+  box.innerHTML='<div class="empty">এখানে কোনো কাজ নেই 😊</div>';
+ }else{
+  box.innerHTML=list.map(t=>`
+  <div class="task ${t.done?'completed':''}">
+   <div class="tasktop">
+    <input type="checkbox" ${t.done?'checked':''} onchange="toggle(${t.id})">
+    <div class="taskname">${escapeHTML(t.name)}</div>
+    ${t.done?'<span class="status">সম্পন্ন</span>':''}
+   </div>
+   <div class="meta">📅 ${t.date} · ${escapeHTML(t.category)}
+   ${t.due?' · শেষ সময়: '+t.due:''}</div>
+   <div class="actions">
+    <button class="edit" onclick="editTask(${t.id})">✏️ এডিট</button>
+    <button class="del" onclick="deleteTask(${t.id})">🗑️ ডিলিট</button>
+   </div>
+  </div>`).join("");
+ }
+ updateHistory();
+}
+function escapeHTML(s){
+ return String(s).replace(/[&<>"']/g,c=>({
+ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+ }[c]));
+}
+function updateHistory(){
+ const sel=document.getElementById("historyDate");
+ const old=sel.value;
+ const dates=[...new Set(tasks.map(t=>t.date))].sort().reverse();
+ sel.innerHTML='<option value="">সব তারিখ</option>'+
+ dates.map(d=>`<option value="${d}">${d}</option>`).join("");
+ sel.value=dates.includes(old)?old:"";
+ showHistory();
+}
+function showHistory(){
+ const date=document.getElementById("historyDate").value;
+ const list=tasks.filter(t=>!date||t.date===date);
+ const done=list.filter(t=>t.done).length;
+ document.getElementById("history").innerHTML=
+ `<p style="font-size:13px">মোট ${list.length}টি কাজ · ${done}টি সম্পন্ন · ${list.length-done}টি বাকি</p>`+
+ (list.length?list.map(t=>`<p style="font-size:13px">${t.done?'✅':'⏳'} ${escapeHTML(t.name)} — ${t.date}</p>`).join(""):'<p class="empty">কোনো ইতিহাস নেই</p>');
+}
+function backup(){
+ const blob=new Blob([JSON.stringify(tasks,null,2)],{type:"application/json"});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");
+ a.href=url;a.download="my-task-backup.json";a.click();
+ URL.revokeObjectURL(url);
+}
+function restoreData(e){
+ const file=e.target.files[0];
+ if(!file)return;
+ const reader=new FileReader();
+ reader.onload=()=>{
+  try{
+   const data=JSON.parse(reader.result);
+   if(!Array.isArray(data)||!data.every(t=>t&&typeof t.name==="string"&&typeof t.id==="number"&&typeof t.date==="string"&&typeof t.done==="boolean"))throw Error();
+   if(confirm("বর্তমান কাজের জায়গায় ব্যাকআপের কাজগুলো বসাতে চান?")){
+    tasks=data;save();
+   }
+  }catch(err){alert("সঠিক ব্যাকআপ ফাইল নয়।")}
+  e.target.value="";
+ };
+ reader.readAsText(file);
+}
+document.getElementById("taskDate").value=today();
+load();
+render();
+</script>
+</body>
+</html>
